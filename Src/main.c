@@ -21,12 +21,13 @@
 #endif
 
 #include<stdio.h>
+#include<stdint.h>
 
 void task1_handler(void);
 void task2_handler(void);
 void task3_handler(void);
 void task4_handler(void);
-
+void init_systick_timer(uint32_t tick_hz);
 
 #define TASK_STACK_SIZE 		1024U
 #define SCHED_STACK_SIZE		1024U
@@ -40,10 +41,14 @@ void task4_handler(void);
 #define TASK_3_STACK_START		(SRAM_END) - (2 * (TASK_STACK_SIZE))
 #define TASK_4_STACK_START		(SRAM_END) - (3 * (TASK_STACK_SIZE))
 #define SCHED_STACK_START		(SRAM_END) - (4 * (TASK_STACK_SIZE))
+#define TICK_HZ					1000U
 
+#define HSI_CLOCK				1600000U
+#define SYSTICK_TIM_CLK			HSI_CLOCK
 
 int main(void)
 {
+	init_systick_timer(TICK_HZ);
     /* Loop forever */
 	for(;;);
 }
@@ -79,4 +84,34 @@ void task4_handler(void) {
 
 		printf("This is Task4\n");
 	}
+}
+
+
+void init_systick_timer(uint32_t tick_hz) {
+
+	// accessing the systic registers
+	uint32_t * pSYST_RVR = (uint32_t *)0xE000E014;
+	uint32_t * pSYST_CSR = (uint32_t *)0xE000E010;
+
+	uint32_t count_value = (SYSTICK_TIM_CLK / tick_hz) - 1;
+
+
+	// clear the value of SVR
+	*pSYST_RVR &= ~(0x00FFFFFFFF);
+
+	// load the value into the SVR register
+	*(pSYST_RVR) |= count_value;
+
+	// Set the clock to the system timer from the processor clock
+	*pSYST_CSR |= (1 << 2);
+	// Enable exception setting TICKINT  so that exception handler is called
+	*pSYST_CSR |= (1 << 1);
+	// Enable the counter
+	*pSYST_CSR |= (1 << 0);
+}
+
+
+void SysTick_Handler(void) {
+
+
 }
