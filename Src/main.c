@@ -22,33 +22,38 @@
 
 #include<stdio.h>
 #include<stdint.h>
+#include"main.h"
 
 void task1_handler(void);
 void task2_handler(void);
 void task3_handler(void);
 void task4_handler(void);
 void init_systick_timer(uint32_t tick_hz);
+__attribute__((naked)) void init_scheduler_stack(uint32_t sched_top_of_stack);
+__attribute__((naked)) void switch_sp_to_psp(void);
+void init_task_stack(void);
 
-#define TASK_STACK_SIZE 		1024U
-#define SCHED_STACK_SIZE		1024U
 
-#define SRAM_START				0x20000000U
-#define SRAM_SIZE				((128) * (1024))
-#define SRAM_END				(SRAM_START + SRAM_SIZE)
-
-#define TASK_1_STACK_START		(SRAM_END)
-#define TASK_2_STACK_START		(SRAM_END) - (1 * (TASK_STACK_SIZE))
-#define TASK_3_STACK_START		(SRAM_END) - (2 * (TASK_STACK_SIZE))
-#define TASK_4_STACK_START		(SRAM_END) - (3 * (TASK_STACK_SIZE))
-#define SCHED_STACK_START		(SRAM_END) - (4 * (TASK_STACK_SIZE))
-#define TICK_HZ					1000U
-
-#define HSI_CLOCK				1600000U
-#define SYSTICK_TIM_CLK			HSI_CLOCK
+uint32_t psp_of_tasks[MAX_TASKS] = {TASK_1_STACK_START, TASK_2_STACK_START, TASK_3_STACK_START, TASK_4_STACK_START};
+uint32_t task_handlers[MAX_TASKS];
 
 int main(void)
 {
+
+	// initialize the scheduler
+	init_scheduler_stack(SCHED_STACK_START);
+
+	// initialize all the stack framses
+	init_task_stack();
+
 	init_systick_timer(TICK_HZ);
+
+
+	switch_sp_to_psp();
+
+
+	task1_handler();
+
     /* Loop forever */
 	for(;;);
 }
@@ -110,6 +115,85 @@ void init_systick_timer(uint32_t tick_hz) {
 	*pSYST_CSR |= (1 << 0);
 }
 
+__attribute__((naked)) void init_scheduler_stack(uint32_t sched_top_of_stack)
+{
+
+	// accessing MSP through inline assembly
+	__asm volatile("MSR MSP, %0": : "r" (sched_top_of_stack) : );
+
+	// go back to main
+	__asm volatile("BX LR");
+}
+
+
+void init_task_stack(void) {
+
+	// initialize 4 tasks
+	uint32_t *psp;
+
+	for (int i = 0; i < MAX_TASKS ; i++)
+	{
+		psp = (uint32_t *) psp_of_tasks[i];
+
+		// full descending stack so we decrement the pointer first
+		(*psp)--;
+
+		// first value is xPsr
+		*psp = DUMMY_XPSR;
+
+
+		// for PC
+		psp--;
+		*psp = (uint32_t *)task_handlers[i];
+
+
+		// for LR
+		psp--;
+		*psp = 0xFFFFFFFD;
+
+
+		for (int j = 0; j < 13 ; j++) {
+
+			psp--;
+			*psp = 0;
+		}
+
+
+		psp_of_tasks[i] = (uint32_t)psp;
+
+
+	}
+}
+
+uint8_t current_task = 0;
+
+uint32_t get_psp_value(void) {
+
+	return psp_of_tasks[current_task];
+}
+
+__attribute__((naked)) void switch_sp_to_psp(void) {
+
+	// save LR value to prevent corruption
+	__asm volatile ("PUSH {LR}");
+	// initialize the psp with TASK 1 stack start address
+
+	__asm volatile("BL get_psp_value");
+
+	// the intial stack address is now stored in RO
+	__asm volatile ("MSR PSP, R0");
+
+	// restore LR value
+	__asm volatile ("POP {LR}");
+
+	// change SP to PSP using Control Register
+	__asm volatile ("MOV R0, 0x02");
+	__asm volatile ("MSR CONTROL, R0");
+
+	// return to main
+	__asm volatile("BX LR");
+
+}
 
 void SysTick_Handler(void) {
 
