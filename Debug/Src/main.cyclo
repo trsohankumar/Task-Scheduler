@@ -8,4 +8,6 @@
 ../Src/main.c:129:6:init_task_stack	3
 ../Src/main.c:170:10:get_psp_value	1
 ../Src/main.c:175:29:switch_sp_to_psp	1
-../Src/main.c:198:6:SysTick_Handler	1
+../Src/main.c:198:6:save_psp_value	1
+../Src/main.c:204:6:update_next_task	1
+../Src/main.c:211:6:SysTick_Handler	1

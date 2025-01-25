@@ -195,7 +195,50 @@ __attribute__((naked)) void switch_sp_to_psp(void) {
 
 }
 
-void SysTick_Handler(void) {
+void save_psp_value(uint32_t current_psp_value)
+{
+
+	psp_of_tasks[current_task] = current_psp_value;
+}
+
+void update_next_task(void){
+
+	// simulate the next task using round robin
+	current_task++;
+	current_task %= MAX_TASKS;
+}
+
+__attribute__((naked)) void SysTick_Handler(void) {
+
+	// save the context of the current task
+
+	// get the current task PSP value
+	__asm volatile ("MRS R0, PSP");
+
+	// using that PSP to store Stack frame 2 (R4 to R11)
+	__asm volatile ("STMDB R0!, {R4-R11}");
+
+	// save LR value to prevent corruption
+	__asm volatile ("PUSH {LR}");
+
+	// save the current value of PSP
+	__asm volatile("BL save_psp_value");
+
+	// Retrieve the context of the next task
+	__asm volatile("BL update_next_task");
+
+	// get its past PSP value
+	__asm volatile("BL get_psp_value");
+
+	// Retreive SF2
+	__asm volatile("LDM R0!, {R4-R11}");
+
+	// update PSP and exit
+	__asm volatile("MSR PSP, R0");
+
+	// restore LR value
+	__asm volatile ("POP {LR}");
 
 
+	__asm volatile ("BX LR");
 }
